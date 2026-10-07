@@ -1,0 +1,43 @@
+name: Post daily links
+
+on:
+  schedule:
+    # Mon-Fri 12:00 PM Eastern. Cron is UTC, so run at 16:00 and 17:00 UTC
+    # (noon in EDT / EST) and let the step below skip the wrong one.
+    - cron: "0 16,17 * * 1-5"
+  workflow_dispatch:        # "Run workflow" button = force a post now
+    inputs:
+      force:
+        description: "Post even if already posted today"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency: post-links
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          # Scheduled runs only act around noon New York time (13 = GitHub ran late;
+          # the already-posted check stops it posting twice).
+          hour=$(TZ=America/New_York date +%H)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$hour" != "12" ] && [ "$hour" != "13" ]; then
+            echo "It's ${hour}:00 in New York, not noon - skipping"; exit 0
+          fi
+          python post_once.py
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          CHANNEL_ID: "1463655636817416213"
+          FORCE: ${{ inputs.force }}
+      - name: Remember what was posted
+        run: |
+          git config user.name "links-bot"
+          git config user.email "links-bot@users.noreply.github.com"
+          git add last_posted.json
+          git diff --cached --quiet || (git commit -m "Posted links" && git push)
