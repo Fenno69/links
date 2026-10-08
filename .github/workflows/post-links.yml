@@ -2,9 +2,10 @@ name: Post daily links
 
 on:
   schedule:
-    # Mon-Fri 12:00 PM Eastern. Cron is UTC, so run at 16:00 and 17:00 UTC
-    # (noon in EDT / EST) and let the step below skip the wrong one.
-    - cron: "0 16,17 * * 1-5"
+    # Mon-Fri from 12:00 PM Eastern. GitHub often runs schedules hours late or
+    # drops them, so check every 30 min (off the busy :00 mark) through the
+    # afternoon; the first run at/after noon posts, the rest see "already posted".
+    - cron: "7,37 16-23 * * 1-5"
   workflow_dispatch:        # "Run workflow" button = force a post now
     inputs:
       force:
@@ -24,11 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          # Scheduled runs only act around noon New York time (13 = GitHub ran late;
-          # the already-posted check stops it posting twice).
-          hour=$(TZ=America/New_York date +%H)
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$hour" != "12" ] && [ "$hour" != "13" ]; then
-            echo "It's ${hour}:00 in New York, not noon - skipping"; exit 0
+          # Scheduled runs only act from noon New York time on (before noon in
+          # winter, when 16:xx UTC is 11:xx EST, they skip).
+          hour=$(TZ=America/New_York date +%-H)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$hour" -lt 12 ]; then
+            echo "It's ${hour}:xx in New York, before noon - skipping"; exit 0
           fi
           python post_once.py
         env:
